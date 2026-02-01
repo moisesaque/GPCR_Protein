@@ -41,6 +41,7 @@ pip install openpyxl requests
 NCBI requires user identification for programmatic access.
 
 NCBI_EMAIL "your.email@institution.edu"
+
 NCBI_API_KEY "YOUR_NCBI_API_KEY"
 
 
@@ -209,29 +210,3 @@ python 3_ExonCount_2.py
   * assembly mismatch is the most common cause
   * check GFF version vs XP_/XM_ release
 * Exon counts include **predicted exons** (RefSeq pipeline)
-
----
-
-## Conceptual guarantee
-
-This pipeline ensures that:
-
-* exon counts are **isoform-correct**
-* protein sequences and exon structures are **biologically consistent**
-* no Gene-level averaging or canonical assumptions are introduced
-
-This makes the output suitable for:
-
-* comparative genomics
-* GPCR family analysis
-* exon–isoform evolution studies
-* downstream phylogenetics or structure–function work
-
----
-
-If you want, the next logical extensions would be:
-
-* exporting exon–intron structures as BED
-* validating exon count vs CDS length
-* adding transcript accession (XM_) as an explicit column
-* automating GFF download via NCBI Datasets CLI
