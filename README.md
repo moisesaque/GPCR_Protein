@@ -1,187 +1,179 @@
-GPCR Annotation Pipeline (NCBI-based)
+# GPCR Annotation Pipeline (NCBI-based)
 
-This repository contains a stepwise Python pipeline to curate GPCR-related sequences starting from NCBI accessions stored in Excel files.
-The workflow progressively annotates GeneIDs, removes redundant isoforms, retrieves protein FASTA sequences, infers exon counts and chromosome location, and finally exports a clean multi-FASTA file.
+This repository provides a **stepwise Python pipeline** for curating GPCR-related protein sequences starting from NCBI accessions stored in Excel files.
+The workflow progressively annotates **GeneIDs**, removes redundant isoforms, retrieves **protein FASTA sequences**, infers **exon counts and chromosome location**, and finally exports a **clean multi-FASTA file**.
 
-The scripts are designed to be run sequentially, as each step depends on the output of the previous one.
+Each script must be executed **in order**, as downstream steps depend on the outputs of previous ones.
 
-Requirements
-Software
+---
 
-Python ≥ 3.9
+## Requirements
 
-Microsoft Excel files (.xlsx)
+### Software
 
-Python dependencies
+* Python ≥ 3.9
+* Excel files (`.xlsx`)
+
+### Python dependencies
 
 Install required packages with:
 
+```bash
 pip install requests openpyxl biopython
+```
 
-NCBI requirements (mandatory)
+### NCBI requirements (mandatory)
 
 NCBI requires user identification for automated queries.
 
-You must define:
+Before running the scripts, edit them to include:
 
-a valid email address
-
-(recommended) an NCBI API key
-
-These are hardcoded in the scripts and should be edited before use.
+* a valid email address
+* (recommended) an NCBI API key
 
 Example:
 
+```python
 NCBI_EMAIL = "your.email@institution.edu"
 NCBI_API_KEY = "your_ncbi_api_key"
+```
 
-Input data format
+---
 
-Input files are Excel (.xlsx)
+## Input data format
 
-First worksheet is ignored
+* Input files must be Excel (`.xlsx`)
+* **The first worksheet is ignored**
+* All subsequent worksheets are processed independently
+* Each worksheet must contain:
 
-All subsequent sheets represent gene families or receptor subgroups
+  * **Column A**: NCBI protein accession (e.g. `XP_`, `NP_`)
 
-Each sheet must contain:
+Additional annotation columns are added automatically by the scripts.
 
-Column A: NCBI protein accession (e.g. XP_, NP_)
+⚠️ This pipeline assumes **RefSeq-style accessions**.
+GenBank-only, obsolete, or poorly annotated accessions may fail.
 
-Additional columns are added automatically by the scripts
+---
 
-⚠️ The pipeline assumes RefSeq-style accessions. GenBank-only or obsolete accessions may fail.
+## Pipeline overview
 
-Pipeline overview
-1️⃣ 1_GeneID_v0.3.py — Map accessions to GeneID
+### 1️⃣ `1_GeneID_v0.3.py` — Accession → GeneID mapping
 
-Purpose
+**Purpose**
 
-Resolves each protein accession (XP_, NP_) to its corresponding NCBI GeneID
+* Maps each protein accession to its corresponding **NCBI GeneID**
+* Uses `esearch` + `elink` via NCBI E-utilities
+* Implements local caching to minimize redundant API requests
 
-Uses esearch + elink via NCBI E-utilities
+**Input**
 
-Results are cached locally to reduce API load
+* Excel file with protein accessions in column `A`
 
-Input
+**Output**
 
-Excel file with accessions in column A
+* New Excel file with GeneID added (column `Y`)
+* Cache file: `ncbi_geneid_cache.json`
 
-Output
+---
 
-New Excel file with GeneID added (column Y)
+### 2️⃣ `2_ProteinCuratingSequence_v0.1.py` — Isoform curation and FASTA retrieval
 
-JSON cache file:
+**Purpose**
 
-ncbi_geneid_cache.json
+* Resolves multiple protein isoforms per GeneID
+* Keeps **one representative sequence per gene** using:
 
-1_GeneID_v0.3
+  1. Preference for annotated proteins (`NP_`)
+  2. Longest amino acid sequence
+* Retrieves **protein FASTA sequences**
+* Flags discarded duplicate isoforms
+* Warns if the retained protein does not start with Methionine (`M`)
 
-2️⃣ 2_ProteinCuratingSequence_v0.1.py — Isoform deduplication + FASTA retrieval
+**Input**
 
-Purpose
+* Excel file generated in step 1
 
-For each GeneID:
+**Output**
 
-Keeps one representative protein
+* Excel file with:
 
-Preference order:
+  * Curated FASTA sequence (column `Z`)
+  * Optional duplicate flag (`DUP_SKIP`)
+* Cache file: `ncbi_protein_fasta_cache.json`
 
-Annotated proteins (NP_)
+---
 
-Longest amino acid sequence
+### 3️⃣ `3_ExonCount_v0.3.py` — Exon count and chromosome inference
 
-Downloads protein FASTA sequences
+**Purpose**
 
-Flags skipped duplicate isoforms
+* Infers:
 
-Warns if protein does not start with Methionine (M)
+  * Number of exons
+  * Chromosome assignment
+* Strategy:
 
-Input
+  * protein accession → GeneID
+  * GeneID → `Entrez.esummary`
+  * Exon count from `GenomicInfo.ExonCount`
+* Chromosome normalization:
 
-Excel produced in step 1
+  * `1–22`, `X`, `Y`
+  * otherwise labeled as `unplaced`
 
-Output
+**Important limitation**
 
-Excel file with:
+* Exon counts correspond to **RefSeq gene models**
+* Transcript- or isoform-specific exon structures are **not resolved**
 
-Curated FASTA sequence (column Z)
+**Input**
 
-Optional duplicate flag (DUP_SKIP)
+* Excel file generated in step 2
 
-JSON cache:
+**Output**
 
-ncbi_protein_fasta_cache.json
+* Excel file with:
 
-2_ProteinCuratingSequence_v0.1
+  * Exon count (column `X`)
+  * Chromosome (column `AA`)
 
-3️⃣ 3_ExonCount_v0.3.py — Exon count and chromosome inference
+---
 
-Purpose
+### 4️⃣ `4_GenerateFasta_v0.1.py` — Final multi-FASTA export
 
-Infers number of exons and chromosome number
+**Purpose**
 
-Strategy:
-
-protein accession → GeneID
-
-GeneID → Entrez.esummary
-
-Uses GenomicInfo.ExonCount
-
-Chromosome is normalized:
-
-1–22, X, Y
-
-otherwise labeled as unplaced
-
-Important limitation
-
-Exon counts correspond to RefSeq gene models
-
-Alternative transcripts and isoform-specific exon structures are not resolved
-
-Input
-
-Excel produced in step 2
-
-Output
-
-Excel file with:
-
-Exon count (column X)
-
-Chromosome (column AA)
-
-3_ExonCount_v0.3
-
-4️⃣ 4_GenerateFasta_v0.1.py — Final multi-FASTA export
-
-Purpose
-
-Extracts curated FASTA sequences from Excel
-
-Appends sheet name as a suffix to each FASTA header
+* Extracts curated FASTA sequences from Excel
+* Appends worksheet name to each FASTA header
 
 Example:
+
+```
 >Lch_XP_012345678_CALCR
+```
 
-Merges all sheets into one FASTA file
+* Merges all sequences into a single FASTA file
 
-Input
+**Input**
 
-Excel produced in step 3
+* Excel file generated in step 3
 
-Output
+**Output**
 
-Final multi-FASTA file (.fasta)
+* Final multi-FASTA file (`.fasta`)
 
-4_GenerateFasta_v0.1
+---
 
-Recommended execution order
+## Execution order
+
+The scripts **must** be run in the following order:
+
+```
 1_GeneID_v0.3.py
 → 2_ProteinCuratingSequence_v0.1.py
 → 3_ExonCount_v0.3.py
 → 4_GenerateFasta_v0.1.py
+```
 
-
-⚠️ Skipping steps will break downstream scripts.
+Skipping steps will break downstream scripts.
