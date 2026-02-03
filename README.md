@@ -1,212 +1,187 @@
-## Excel–NCBI Annotation Pipeline
+GPCR Annotation Pipeline (NCBI-based)
 
-**GeneID mapping → isoform curation & FASTA export → exon count from RefSeq GFF**
+This repository contains a stepwise Python pipeline to curate GPCR-related sequences starting from NCBI accessions stored in Excel files.
+The workflow progressively annotates GeneIDs, removes redundant isoforms, retrieves protein FASTA sequences, infers exon counts and chromosome location, and finally exports a clean multi-FASTA file.
 
----
+The scripts are designed to be run sequentially, as each step depends on the output of the previous one.
 
-## Overview
+Requirements
+Software
 
-This pipeline processes Excel files containing **NCBI protein accession numbers (XP_/NP_)** and progressively enriches them with:
+Python ≥ 3.9
 
-1. **GeneID annotation** (NCBI Gene)
-2. **Isoform curation + protein FASTA export**
-3. **Exact exon count per isoform**, derived from the **RefSeq genome annotation (GFF3)**
+Microsoft Excel files (.xlsx)
 
-The pipeline is designed to:
+Python dependencies
 
-* handle **multiple isoforms per gene**
-* preserve **isoform-specific exon structures**
-* support **predicted RefSeq annotations (XM_/XP_)**
-* avoid ambiguity introduced by Gene-level exon counts
+Install required packages with:
 
-Each step produces a new Excel file that becomes the input for the next step.
+pip install requests openpyxl biopython
 
----
+NCBI requirements (mandatory)
 
-## Requirements
+NCBI requires user identification for automated queries.
 
-### Software
+You must define:
 
-* Python ≥ 3.9
-* Internet connection (NCBI Entrez access)
+a valid email address
 
-### Python dependencies
+(recommended) an NCBI API key
 
-```bash
-pip install openpyxl requests
-```
-
-### NCBI usage requirements
-
-NCBI requires user identification for programmatic access.
-
-NCBI_EMAIL "your.email@institution.edu"
-
-NCBI_API_KEY "YOUR_NCBI_API_KEY"
-
-
----
-
-## Input Excel file (initial)
-
-* **Row 1**: header (ignored by all scripts)
-* **Column A**: NCBI **protein accession number** (XP_, NP_, etc.)
-* Multiple sheets allowed (e.g. `CALCR`, `CRHR`, `PTHR`, `GCGR`, `VIP SCRT`)
-
----
-
-## Step 1 — Map protein accessions to GeneID
-
-**Script:** `1_GeneID.py` 
-
-### Purpose
-
-* Resolves each protein accession (column A) to its corresponding **NCBI GeneID**
-* Writes GeneID to **column Y**
-* Uses NCBI `esearch` + `elink`
-* Caches results to avoid redundant queries
-
-### Input
-
-* Excel file with protein accessions in **column A**
-
-### Output
-
-* New Excel file with:
-
-  * **Column Y** → GeneID
-
-### Run
-
-```bash
-python 1_GeneID.py
-```
-
----
-
-## Step 2 — Isoform curation and protein FASTA export
-
-**Script:** `2_ProteinCuratingSequence.py` 
-
-### Purpose
-
-For each GeneID **within the same sheet**:
-
-1. Detects duplicated GeneIDs (multiple isoforms)
-2. Keeps **only the longest protein isoform**
-
-   * based on **protein length (aa) in column C**
-3. Marks discarded isoforms with `DUP_SKIP` (column AA)
-4. Downloads the **protein amino acid sequence** from NCBI
-5. Writes a **custom FASTA** to **column Z**
-
-### FASTA format (per cell)
-
-```
->Lch_XP_006010891.1
-MPALIMEKKWAQFLLILSV...
-```
-
-Species abbreviation is inferred automatically from the Excel filename:
-
-* `Latimeria.chalumnae` → `Lch`
-
-### Input
-
-* Excel file produced by **Step 1**
-* Required columns:
-
-  * A → protein accession
-  * C → protein length (aa)
-  * Y → GeneID
-
-### Output
-
-* New Excel file with:
-
-  * **Column Z** → protein FASTA
-  * **Column AA** → `DUP_SKIP` (optional)
-
-### Run
-
-```bash
-python 2_ProteinCuratingSequence.py
-```
-
----
-
-## Step 3 — Isoform-specific exon count from RefSeq GFF
-
-**Script:** `3_ExonCount_2.py` 
-
-### Purpose
-
-Computes the **exact exon count per isoform**, using the **RefSeq genome annotation (GFF3)** instead of transcript GenBank records.
-
-This is essential because:
-
-* Many XM_/XP_ records **do not list exon coordinates**
-* Exon structure is defined in the **assembly-level GFF**
-* Different isoforms of the same gene can have **different exon counts**
-
-### Method
-
-1. Parse the RefSeq **genomic GFF3**
-2. Build mappings:
-
-   * `protein_id (XP_) → transcript_id`
-   * `transcript_id → number of exons`
-3. For each protein accession in column A:
-
-   * Find its parent transcript
-   * Count `exon` features
-4. Write exon count to **column X**
-
-### Input
-
-* Excel file produced by **Step 2**
-* RefSeq **GFF3 or GFF3.GZ** file for the same assembly used to generate XP_/XM_
+These are hardcoded in the scripts and should be edited before use.
 
 Example:
 
-```
-GCF_018977255.1_IMCB_Cmil_1.0_genomic.gff.gz
-```
+NCBI_EMAIL = "your.email@institution.edu"
+NCBI_API_KEY = "your_ncbi_api_key"
 
-> ⚠️ The GFF **must match the RefSeq assembly version** used for the annotations, otherwise exon counts may be missing.
+Input data format
 
-### Output
+Input files are Excel (.xlsx)
 
-* Final Excel file with:
+First worksheet is ignored
 
-  * **Column X** → isoform-specific exon count
+All subsequent sheets represent gene families or receptor subgroups
 
-### Run
+Each sheet must contain:
 
-```bash
-python 3_ExonCount_2.py
-```
+Column A: NCBI protein accession (e.g. XP_, NP_)
 
----
+Additional columns are added automatically by the scripts
 
-## Final Excel structure (relevant columns)
+⚠️ The pipeline assumes RefSeq-style accessions. GenBank-only or obsolete accessions may fail.
 
-| Column | Content                                 |
-| ------ | --------------------------------------- |
-| A      | Protein accession (XP_/NP_)             |
-| C      | Protein length (aa)                     |
-| X      | **Exact exon count (isoform-specific)** |
-| Y      | GeneID                                  |
-| Z      | Protein FASTA                           |
-| AA     | `DUP_SKIP` (discarded isoforms)         |
+Pipeline overview
+1️⃣ 1_GeneID_v0.3.py — Map accessions to GeneID
 
----
+Purpose
 
-## Notes & limitations
+Resolves each protein accession (XP_, NP_) to its corresponding NCBI GeneID
 
-* **WP_ accessions** may not map to a unique transcript → exon count may be `None`
-* If exon count is missing:
+Uses esearch + elink via NCBI E-utilities
 
-  * assembly mismatch is the most common cause
-  * check GFF version vs XP_/XM_ release
-* Exon counts include **predicted exons** (RefSeq pipeline)
+Results are cached locally to reduce API load
+
+Input
+
+Excel file with accessions in column A
+
+Output
+
+New Excel file with GeneID added (column Y)
+
+JSON cache file:
+
+ncbi_geneid_cache.json
+
+1_GeneID_v0.3
+
+2️⃣ 2_ProteinCuratingSequence_v0.1.py — Isoform deduplication + FASTA retrieval
+
+Purpose
+
+For each GeneID:
+
+Keeps one representative protein
+
+Preference order:
+
+Annotated proteins (NP_)
+
+Longest amino acid sequence
+
+Downloads protein FASTA sequences
+
+Flags skipped duplicate isoforms
+
+Warns if protein does not start with Methionine (M)
+
+Input
+
+Excel produced in step 1
+
+Output
+
+Excel file with:
+
+Curated FASTA sequence (column Z)
+
+Optional duplicate flag (DUP_SKIP)
+
+JSON cache:
+
+ncbi_protein_fasta_cache.json
+
+2_ProteinCuratingSequence_v0.1
+
+3️⃣ 3_ExonCount_v0.3.py — Exon count and chromosome inference
+
+Purpose
+
+Infers number of exons and chromosome number
+
+Strategy:
+
+protein accession → GeneID
+
+GeneID → Entrez.esummary
+
+Uses GenomicInfo.ExonCount
+
+Chromosome is normalized:
+
+1–22, X, Y
+
+otherwise labeled as unplaced
+
+Important limitation
+
+Exon counts correspond to RefSeq gene models
+
+Alternative transcripts and isoform-specific exon structures are not resolved
+
+Input
+
+Excel produced in step 2
+
+Output
+
+Excel file with:
+
+Exon count (column X)
+
+Chromosome (column AA)
+
+3_ExonCount_v0.3
+
+4️⃣ 4_GenerateFasta_v0.1.py — Final multi-FASTA export
+
+Purpose
+
+Extracts curated FASTA sequences from Excel
+
+Appends sheet name as a suffix to each FASTA header
+
+Example:
+>Lch_XP_012345678_CALCR
+
+Merges all sheets into one FASTA file
+
+Input
+
+Excel produced in step 3
+
+Output
+
+Final multi-FASTA file (.fasta)
+
+4_GenerateFasta_v0.1
+
+Recommended execution order
+1_GeneID_v0.3.py
+→ 2_ProteinCuratingSequence_v0.1.py
+→ 3_ExonCount_v0.3.py
+→ 4_GenerateFasta_v0.1.py
+
+
+⚠️ Skipping steps will break downstream scripts.
