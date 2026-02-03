@@ -9,15 +9,15 @@ from json import JSONDecodeError
 from openpyxl import load_workbook
 
 # ====== CONFIGURAÇÕES ======
-INPUT_XLSX = r"C:\Users\moise\OneDrive - Universidade do Algarve\Biotec 2\GProtein\Latimeria chalumnae\Latimeria.chalumnae_FamilyB1.xlsx"   # ajusta se necessário
-OUTPUT_XLSX = r"C:\Users\moise\OneDrive - Universidade do Algarve\Biotec 2\GProtein\Latimeria chalumnae\Latimeria.chalumnae_FamilyB1_with_GeneID.xlsx"
+INPUT_XLSX = r"PATH.xlsx"   # ajusta se necessário
+OUTPUT_XLSX = r"PATH.xlsx"
 
 ACCESSION_COL = "A"
 OUTPUT_COL = "Y"
 
 # O NCBI pede que identifiques um email válido no tool usage
-NCBI_EMAIL = "a71548@ualg.pt"
-NCBI_API_KEY = "c2e2eec915a655dc89d6fe817df19afbca09"  # opcional, mas recomendado se tiveres
+NCBI_EMAIL = "email"
+NCBI_API_KEY = "API KEY"  # opcional, mas recomendado se tiveres
 TOOL_NAME = "accession_to_geneid_mapper"
 
 # Rate limit: sem API key ~3 req/s (na prática, usa 0.34s). Com API key podes ir mais alto,
